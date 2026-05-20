@@ -15,5 +15,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Erro ao salvar token de autenticação' }, { status: 500 });
   }
 
-  return NextResponse.redirect(new URL('/?connected=true', request.url));
+  const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || 'localhost:3000';
+  const proto = request.headers.get('x-forwarded-proto') || 'https';
+  return NextResponse.redirect(`${proto}://${host}/?connected=true`);
 }
