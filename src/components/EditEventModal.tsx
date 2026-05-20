@@ -15,13 +15,25 @@ const selectClass =
   'w-full border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500';
 const labelClass = 'block text-sm font-medium text-gray-700 mb-1';
 
+/** Normalise a stored date string to the format required by datetime-local / date inputs.
+ *  datetime-local needs exactly "YYYY-MM-DDTHH:MM" (16 chars, no timezone).
+ *  date needs exactly "YYYY-MM-DD".
+ *  GCal returns "2026-06-16T08:00:00-03:00" — slice(0,16) gives "2026-06-16T08:00". ✓
+ */
+function toInputDate(dateStr: string, allDay: boolean): string {
+  if (!dateStr) return '';
+  if (allDay) return dateStr.slice(0, 10); // "YYYY-MM-DD"
+  return dateStr.slice(0, 16);             // "YYYY-MM-DDTHH:MM"
+}
+
 function eventToPayload(ev: Event): CreateEventPayload {
+  const allDay = Boolean(ev.all_day);
   return {
     title: ev.title,
     theme: ev.theme ?? '',
-    date_start: ev.date_start,
-    date_end: ev.date_end ?? '',
-    all_day: Boolean(ev.all_day),
+    date_start: toInputDate(ev.date_start, allDay),
+    date_end: toInputDate(ev.date_end ?? '', allDay),
+    all_day: allDay,
     location: ev.location ?? '',
     organizer: ev.organizer ?? '',
     description: ev.description ?? '',
