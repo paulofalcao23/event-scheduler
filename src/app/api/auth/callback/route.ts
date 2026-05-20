@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { saveToken } from '@/lib/googleCalendar';
-import { redirect } from 'next/navigation';
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get('code');
@@ -16,5 +15,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Erro ao salvar token de autenticação' }, { status: 500 });
   }
 
-  redirect('/?connected=true');
+  return NextResponse.redirect(new URL('/?connected=true', request.url));
 }

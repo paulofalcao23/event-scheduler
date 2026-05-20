@@ -55,6 +55,7 @@ export async function saveToken(code: string): Promise<void> {
   );
 
   const { tokens } = await oauth2Client.getToken(code);
+  fs.mkdirSync(path.dirname(TOKEN_PATH), { recursive: true });
   fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens));
 }
 
