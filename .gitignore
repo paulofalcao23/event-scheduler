@@ -34,3 +34,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# oauth token (sensitive)
+.token.json
+data/.token.json
+
+# local database files (keep the data/ directory tracked for Railway volume mount)
+/data/*.db
+/data/*.db-shm
+/data/*.db-wal
