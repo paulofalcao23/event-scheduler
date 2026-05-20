@@ -1,14 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import EventForm from '@/components/EventForm';
 import EventTable from '@/components/EventTable';
 import { useEvents } from '@/hooks/useEvents';
+
+const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 export default function Home() {
   const { events, loading, error, refetch } = useEvents();
   const [calConnected, setCalConnected] = useState<boolean | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [pullStatus, setPullStatus] = useState<string | null>(null);
+  const pullTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     fetch('/api/auth/status')
@@ -16,6 +20,47 @@ export default function Home() {
       .then((d) => setCalConnected(d.authenticated))
       .catch(() => setCalConnected(false));
   }, []);
+
+  const pullFromGcal = useCallback(async (silent = true) => {
+    if (!silent) setPullStatus('Buscando eventos do Google Calendar...');
+    try {
+      const res = await fetch('/api/pull-from-gcal', { method: 'POST' });
+      if (res.status === 410) {
+        // Sync token expired — retry once (server reset the token)
+        await fetch('/api/pull-from-gcal', { method: 'POST' });
+      }
+      if (res.ok) {
+        const data = await res.json();
+        if (data.created > 0 || data.updated > 0 || data.deleted > 0) {
+          refetch();
+          if (!silent) {
+            setPullStatus(
+              `Sincronizado: ${data.created} novo(s), ${data.updated} atualizado(s), ${data.deleted} removido(s).`
+            );
+            setTimeout(() => setPullStatus(null), 4000);
+          }
+        } else if (!silent) {
+          setPullStatus('Nenhuma novidade no Google Calendar.');
+          setTimeout(() => setPullStatus(null), 3000);
+        }
+      }
+    } catch {
+      if (!silent) {
+        setPullStatus('Erro ao buscar do Google Calendar.');
+        setTimeout(() => setPullStatus(null), 3000);
+      }
+    }
+  }, [refetch]);
+
+  // Auto-poll when connected
+  useEffect(() => {
+    if (!calConnected) return;
+    pullFromGcal(true); // immediate silent pull on load
+    pullTimerRef.current = setInterval(() => pullFromGcal(true), POLL_INTERVAL_MS);
+    return () => {
+      if (pullTimerRef.current) clearInterval(pullTimerRef.current);
+    };
+  }, [calConnected, pullFromGcal]);
 
   async function handleSync() {
     setSyncing(true);
@@ -59,11 +104,20 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-3">
-            {calConnected === null ? null : calConnected ? (
-              <span className="flex items-center gap-1.5 text-xs text-green-700 bg-green-50 border border-green-200 px-3 py-1.5 rounded-full">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
-                Google Calendar conectado
+            {pullStatus && (
+              <span className="text-xs text-blue-600 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-full animate-pulse">
+                {pullStatus}
               </span>
+            )}
+            {calConnected === null ? null : calConnected ? (
+              <button
+                onClick={() => pullFromGcal(false)}
+                title="Buscar atualizações do Google Calendar agora"
+                className="flex items-center gap-1.5 text-xs text-green-700 bg-green-50 border border-green-200 px-3 py-1.5 rounded-full hover:bg-green-100 transition-colors cursor-pointer"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+                Google Calendar conectado ↺
+              </button>
             ) : (
               <a
                 href="/setup"
