@@ -10,9 +10,9 @@ const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 export default function Home() {
   const { events, loading, error, refetch } = useEvents();
   const [calConnected, setCalConnected] = useState<boolean | null>(null);
-  const [syncing, setSyncing] = useState(false);
   const [pullStatus, setPullStatus] = useState<string | null>(null);
   const pullTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const justConnected = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('connected') === 'true';
 
   useEffect(() => {
     fetch('/api/auth/status')
@@ -21,27 +21,32 @@ export default function Home() {
       .catch(() => setCalConnected(false));
   }, []);
 
+  const pushUnsyncedToGcal = useCallback(async () => {
+    try {
+      const res = await fetch('/api/sync', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.synced > 0) refetch();
+      }
+    } catch { /* non-fatal */ }
+  }, [refetch]);
+
   const pullFromGcal = useCallback(async (silent = true) => {
     if (!silent) setPullStatus('Buscando eventos do Google Calendar...');
     try {
       const res = await fetch('/api/pull-from-gcal', { method: 'POST' });
-      if (res.status === 410) {
-        // Sync token expired — retry once (server reset the token)
-        await fetch('/api/pull-from-gcal', { method: 'POST' });
-      }
+      if (res.status === 410) await fetch('/api/pull-from-gcal', { method: 'POST' });
       if (res.ok) {
         const data = await res.json();
-        if (data.created > 0 || data.updated > 0 || data.deleted > 0) {
-          refetch();
-          if (!silent) {
-            setPullStatus(
-              `Sincronizado: ${data.created} novo(s), ${data.updated} atualizado(s), ${data.deleted} removido(s).`
-            );
-            setTimeout(() => setPullStatus(null), 4000);
-          }
-        } else if (!silent) {
-          setPullStatus('Nenhuma novidade no Google Calendar.');
-          setTimeout(() => setPullStatus(null), 3000);
+        const changed = data.created > 0 || data.updated > 0 || data.deleted > 0;
+        if (changed) refetch();
+        if (!silent) {
+          setPullStatus(
+            changed
+              ? `Sincronizado: ${data.created} novo(s), ${data.updated} atualizado(s), ${data.deleted} removido(s).`
+              : 'Nenhuma novidade no Google Calendar.'
+          );
+          setTimeout(() => setPullStatus(null), 4000);
         }
       }
     } catch {
@@ -52,38 +57,29 @@ export default function Home() {
     }
   }, [refetch]);
 
-  // Auto-poll when connected
+  // When just connected: push existing events to GCal, then pull GCal → app
+  useEffect(() => {
+    if (!calConnected || !justConnected) return;
+    (async () => {
+      await pushUnsyncedToGcal();
+      await pullFromGcal(true);
+      // Clean ?connected=true from URL
+      window.history.replaceState({}, '', '/');
+    })();
+  }, [calConnected, justConnected, pushUnsyncedToGcal, pullFromGcal]);
+
+  // Auto-poll every 5 min while connected
   useEffect(() => {
     if (!calConnected) return;
-    pullFromGcal(true); // immediate silent pull on load
+    pullFromGcal(true);
     pullTimerRef.current = setInterval(() => pullFromGcal(true), POLL_INTERVAL_MS);
-    return () => {
-      if (pullTimerRef.current) clearInterval(pullTimerRef.current);
-    };
+    return () => { if (pullTimerRef.current) clearInterval(pullTimerRef.current); };
   }, [calConnected, pullFromGcal]);
-
-  async function handleSync() {
-    setSyncing(true);
-    try {
-      const res = await fetch('/api/sync', { method: 'POST' });
-      const data = await res.json();
-      if (res.ok) {
-        alert(`Sincronização concluída: ${data.synced} evento(s) enviados ao Google Calendar.`);
-        refetch();
-      } else {
-        alert('Erro ao sincronizar: ' + (data.error || 'Tente novamente.'));
-      }
-    } catch {
-      alert('Erro ao sincronizar. Tente novamente.');
-    } finally {
-      setSyncing(false);
-    }
-  }
 
   async function handleDelete(id: number) {
     try {
       const res = await fetch(`/api/events/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Erro ao excluir');
+      if (!res.ok) throw new Error();
       refetch();
     } catch {
       alert('Erro ao excluir o evento. Tente novamente.');
@@ -120,7 +116,7 @@ export default function Home() {
               </button>
             ) : (
               <a
-                href="/setup"
+                href="/api/auth/login"
                 className="flex items-center gap-1.5 text-xs text-orange-700 bg-orange-50 border border-orange-200 px-3 py-1.5 rounded-full hover:bg-orange-100 transition-colors"
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-orange-400 inline-block" />
@@ -133,7 +129,7 @@ export default function Home() {
 
       <main className="max-w-screen-2xl mx-auto p-6">
         <div className="grid grid-cols-1 xl:grid-cols-[400px_1fr] gap-6">
-          {/* Form column */}
+          {/* Form */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 className="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <span className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-bold">+</span>
@@ -142,7 +138,7 @@ export default function Home() {
             <EventForm onSuccess={refetch} />
           </div>
 
-          {/* Table column */}
+          {/* Table */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
@@ -154,21 +150,6 @@ export default function Home() {
                   </span>
                 )}
               </h2>
-
-              {!loading && calConnected && events.some((e) => !e.gcal_event_id) && (
-                <button
-                  onClick={handleSync}
-                  disabled={syncing}
-                  className="text-xs text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-full hover:bg-blue-100 transition-colors disabled:opacity-50"
-                >
-                  {syncing ? 'Sincronizando...' : '↑ Sincronizar com Google Calendar'}
-                </button>
-              )}
-              {!loading && calConnected === false && events.some((e) => !e.gcal_event_id) && (
-                <p className="text-xs text-orange-600">
-                  Conecte o Google Calendar para sincronizar eventos
-                </p>
-              )}
             </div>
 
             {error && (
@@ -193,7 +174,7 @@ export default function Home() {
           </span>
           <span className="flex items-center gap-1.5">
             <span className="text-green-500 font-bold">✓</span>
-            Sincronizado com Google Calendar (lembrete 10 dias antes)
+            Sincronizado com Google Calendar
           </span>
         </div>
       </main>
