@@ -1,7 +1,10 @@
-import { redirect } from 'next/navigation';
+import { NextResponse } from 'next/server';
 import { getAuthUrl } from '@/lib/googleCalendar';
+
+// Force dynamic so Next.js never caches this route
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const url = getAuthUrl();
-  redirect(url);
+  return NextResponse.redirect(url);
 }
