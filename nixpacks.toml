@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["python312", "gcc", "gnumake"]
+nixPkgs = ["nodejs_20", "python312", "gcc", "gnumake"]
 
 [variables]
 NODE_VERSION = "20"
