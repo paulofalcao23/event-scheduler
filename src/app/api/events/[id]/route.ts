@@ -33,10 +33,10 @@ export async function PUT(
         attendees=?, notes=?
        WHERE id=?`
     ).run(
-      body.title, body.theme || null, body.date_start, body.date_end,
-      body.all_day ? 1 : 0, body.location || null, body.organizer || null,
-      body.description || null, body.priority, body.decision,
-      body.attendees || null, body.notes || null,
+      body.title, body.theme ?? '', body.date_start, body.date_end,
+      body.all_day ? 1 : 0, body.location ?? '', body.organizer ?? '',
+      body.description ?? '', body.priority, body.decision,
+      body.attendees ?? '', body.notes ?? '',
       id
     );
 

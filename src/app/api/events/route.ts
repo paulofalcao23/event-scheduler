@@ -35,17 +35,17 @@ export async function POST(request: NextRequest) {
       )
       .run(
         body.title,
-        body.theme,
+        body.theme ?? '',
         body.date_start,
         body.date_end,
         body.all_day ? 1 : 0,
-        body.location,
-        body.organizer,
-        body.description || null,
+        body.location ?? '',
+        body.organizer ?? '',
+        body.description ?? '',
         body.priority,
         body.decision,
-        body.attendees || null,
-        body.notes || null
+        body.attendees ?? '',
+        body.notes ?? ''
       );
 
     const id = result.lastInsertRowid as number;
