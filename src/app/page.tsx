@@ -8,6 +8,7 @@ import { useEvents } from '@/hooks/useEvents';
 export default function Home() {
   const { events, loading, error, refetch } = useEvents();
   const [calConnected, setCalConnected] = useState<boolean | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     fetch('/api/auth/status')
@@ -15,6 +16,24 @@ export default function Home() {
       .then((d) => setCalConnected(d.authenticated))
       .catch(() => setCalConnected(false));
   }, []);
+
+  async function handleSync() {
+    setSyncing(true);
+    try {
+      const res = await fetch('/api/sync', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        alert(`Sincronização concluída: ${data.synced} evento(s) enviados ao Google Calendar.`);
+        refetch();
+      } else {
+        alert('Erro ao sincronizar: ' + (data.error || 'Tente novamente.'));
+      }
+    } catch {
+      alert('Erro ao sincronizar. Tente novamente.');
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   async function handleDelete(id: number) {
     try {
@@ -82,6 +101,15 @@ export default function Home() {
                 )}
               </h2>
 
+              {!loading && calConnected && events.some((e) => !e.gcal_event_id) && (
+                <button
+                  onClick={handleSync}
+                  disabled={syncing}
+                  className="text-xs text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-full hover:bg-blue-100 transition-colors disabled:opacity-50"
+                >
+                  {syncing ? 'Sincronizando...' : '↑ Sincronizar com Google Calendar'}
+                </button>
+              )}
               {!loading && calConnected === false && events.some((e) => !e.gcal_event_id) && (
                 <p className="text-xs text-orange-600">
                   Conecte o Google Calendar para sincronizar eventos
