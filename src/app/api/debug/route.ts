@@ -8,8 +8,8 @@ export async function GET() {
   
   let files: string[] = [];
   let tokenExists = false;
-  let tokenContent = null;
-  let cwd = process.cwd();
+  let tokenContent: { has_access_token: boolean; has_refresh_token: boolean; expiry_date: number } | string | null = null;
+  const cwd = process.cwd();
   
   try { files = fs.readdirSync(dataDir); } catch { files = ['ERROR: cannot read dir']; }
   tokenExists = fs.existsSync(tokenPath);
